@@ -478,7 +478,8 @@
             margin-top: 4px;
         }
 
-        .concept-item .apply-concept-btn {
+        .concept-item .apply-concept-btn,
+        .concept-item .eval-concept-btn {
             background: #e94560;
             border: none;
             color: white;
@@ -487,10 +488,65 @@
             font-size: 0.75rem;
             cursor: pointer;
             margin-top: 6px;
+            margin-right: 4px;
         }
 
-        .concept-item .apply-concept-btn:hover {
+        .concept-item .apply-concept-btn:hover,
+        .concept-item .eval-concept-btn:hover {
             background: #ff6b6b;
+        }
+
+        .concept-item .eval-concept-btn {
+            background: #4ecdc4;
+        }
+
+        .concept-item .eval-concept-btn:hover {
+            background: #5fd4cc;
+        }
+
+        .concept-item .eval-results {
+            margin-top: 8px;
+            padding: 8px;
+            background: #1a1a2e;
+            border-radius: 4px;
+            font-size: 0.75rem;
+        }
+
+        .concept-item .eval-results .metric {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 4px;
+        }
+
+        .concept-item .eval-results .metric-value {
+            color: #4ecdc4;
+            font-weight: bold;
+        }
+
+        .concept-item .eval-results .metric-value.good {
+            color: #27ae60;
+        }
+
+        .concept-item .eval-results .metric-value.bad {
+            color: #e74c3c;
+        }
+
+        .concept-item .eval-progress {
+            margin-top: 8px;
+        }
+
+        .concept-item .eval-progress .progress-bar-container {
+            height: 6px;
+        }
+
+        .concept-item .eval-progress .progress-text {
+            font-size: 0.7rem;
+            margin-top: 4px;
+        }
+
+        .eval-concept-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
         }
     </style>
 </head>
@@ -1119,7 +1175,7 @@
             }
 
             container.innerHTML = concepts.map(c => `
-                <div class="concept-item">
+                <div class="concept-item" id="concept-${c.id}">
                     <div class="name">${c.name}</div>
                     <div class="info">
                         Layers: ${c.layers.join(', ')} | Strength: ${c.recommended_strength}
@@ -1128,9 +1184,119 @@
                         <button class="apply-concept-btn" onclick="applyConceptSteering('${c.gguf_file}', ${c.recommended_strength}, ${Math.min(...c.layers)}, ${Math.max(...c.layers)}, '${c.name}')">
                             Apply
                         </button>
+                        <button class="eval-concept-btn" onclick="startEvaluation('${c.name}', '${c.gguf_file}', ${Math.min(...c.layers)}, ${Math.max(...c.layers)}, '${c.id}')">
+                            Evaluate
+                        </button>
                     ` : '<span style="font-size: 0.75rem; color: #666;">No GGUF</span>'}
+                    ${c.evaluation ? renderEvalResults(c.evaluation) : ''}
+                    <div class="eval-progress" id="eval-progress-${c.id}" style="display: none;">
+                        <div class="progress-bar-container">
+                            <div class="progress-bar" id="eval-bar-${c.id}"></div>
+                        </div>
+                        <div class="progress-text" id="eval-text-${c.id}">Starting...</div>
+                    </div>
                 </div>
             `).join('');
+        }
+
+        function renderEvalResults(evaluation) {
+            const scoreClass = evaluation.steering_score > 0.3 ? 'good' : (evaluation.steering_score < 0.1 ? 'bad' : '');
+            const corrClass = evaluation.strength_correlation > 0.7 ? 'good' : (evaluation.strength_correlation < 0.3 ? 'bad' : '');
+
+            return `
+                <div class="eval-results">
+                    <div class="metric">
+                        <span>Steering Score:</span>
+                        <span class="metric-value ${scoreClass}">${evaluation.steering_score.toFixed(3)}</span>
+                    </div>
+                    <div class="metric">
+                        <span>Length Ratio:</span>
+                        <span class="metric-value">${evaluation.length_ratio.toFixed(2)}x</span>
+                    </div>
+                    <div class="metric">
+                        <span>Controllability:</span>
+                        <span class="metric-value ${corrClass}">${evaluation.strength_correlation.toFixed(3)}</span>
+                    </div>
+                    <div class="metric">
+                        <span>Recommended Strength:</span>
+                        <span class="metric-value">${evaluation.recommended_strength.toFixed(2)}</span>
+                    </div>
+                </div>
+            `;
+        }
+
+        // ============ Evaluation ============
+
+        let evaluationJobs = {};
+
+        async function startEvaluation(conceptName, ggufFile, layerStart, layerEnd, conceptId) {
+            if (evaluationJobs[conceptId]) {
+                alert('Evaluation already in progress');
+                return;
+            }
+
+            const progressDiv = document.getElementById(`eval-progress-${conceptId}`);
+            const evalBtn = document.querySelector(`#concept-${conceptId} .eval-concept-btn`);
+
+            if (progressDiv) progressDiv.style.display = 'block';
+            if (evalBtn) evalBtn.disabled = true;
+
+            evaluationJobs[conceptId] = true;
+
+            try {
+                const response = await fetch('/api/evaluate/start', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        concept_name: conceptName,
+                        gguf_file: ggufFile,
+                        layer_start: layerStart,
+                        layer_end: layerEnd
+                    })
+                });
+
+                const data = await response.json();
+                await pollEvaluationProgress(data.job_id, conceptId);
+
+            } catch (e) {
+                console.error('Evaluation error:', e);
+                alert('Evaluation failed: ' + e.message);
+            }
+
+            delete evaluationJobs[conceptId];
+            if (progressDiv) progressDiv.style.display = 'none';
+            if (evalBtn) evalBtn.disabled = false;
+        }
+
+        async function pollEvaluationProgress(jobId, conceptId) {
+            const progressBar = document.getElementById(`eval-bar-${conceptId}`);
+            const progressText = document.getElementById(`eval-text-${conceptId}`);
+
+            while (true) {
+                try {
+                    const response = await fetch(`/api/evaluate/${jobId}`);
+                    const data = await response.json();
+
+                    if (progressBar) progressBar.style.width = `${data.progress * 100}%`;
+                    if (progressText) progressText.textContent = data.current_step;
+
+                    if (data.status === 'complete') {
+                        addSystemMessage(`Evaluation complete for "${data.concept_name}"`);
+                        await loadConcepts(); // Reload to show results
+                        break;
+                    }
+
+                    if (data.status === 'failed') {
+                        alert(`Evaluation failed: ${data.error}`);
+                        break;
+                    }
+
+                    await new Promise(r => setTimeout(r, 1000));
+                } catch (e) {
+                    console.error('Poll error:', e);
+                    break;
+                }
+            }
         }
 
         async function applyConceptSteering(ggufFile, strength, layerStart, layerEnd, name) {

@@ -65,8 +65,18 @@ class ExtractionRequest(BaseModel):
     layers: list[int] = [10, 12, 15, 18, 20, 22, 25]
 
 
-# Extraction job storage
+class EvaluationRequest(BaseModel):
+    concept_name: str
+    gguf_file: str
+    layer_start: int = 10
+    layer_end: int = 25
+    test_prompts: Optional[list[str]] = None
+    strengths: Optional[list[float]] = None
+
+
+# Job storage
 extraction_jobs: dict[str, dict] = {}
+evaluation_jobs: dict[str, dict] = {}
 
 
 def start_llama_server(config: SteeringServerConfig):
@@ -479,11 +489,121 @@ async def list_concepts():
                 metadata["has_gguf"] = gguf_path.exists()
                 metadata["gguf_file"] = f"{metadata['id']}.gguf" if gguf_path.exists() else None
 
+                # Check for evaluation results
+                eval_path = BASE_DIR / "results" / f"eval_{metadata['id']}.json"
+                if eval_path.exists():
+                    with open(eval_path) as f:
+                        metadata["evaluation"] = json.load(f)
+
                 concepts.append(metadata)
             except Exception as e:
                 print(f"Error loading {meta_file}: {e}")
 
     return {"concepts": sorted(concepts, key=lambda x: x.get("created_at", ""), reverse=True)}
+
+
+# ============ Evaluation Endpoints ============
+
+@app.post("/api/evaluate/start")
+async def start_evaluation(request: EvaluationRequest, background_tasks: BackgroundTasks):
+    """Start concept evaluation job"""
+    job_id = str(uuid.uuid4())[:8]
+
+    evaluation_jobs[job_id] = {
+        "status": "pending",
+        "progress": 0.0,
+        "current_step": "Initializing...",
+        "concept_name": request.concept_name,
+        "result": None,
+        "error": None
+    }
+
+    background_tasks.add_task(
+        run_evaluation,
+        job_id,
+        request.concept_name,
+        request.gguf_file,
+        request.layer_start,
+        request.layer_end,
+        request.test_prompts,
+        request.strengths
+    )
+
+    return {"job_id": job_id, "status": "started"}
+
+
+@app.get("/api/evaluate/{job_id}")
+async def get_evaluation_status(job_id: str):
+    """Get evaluation job status"""
+    if job_id not in evaluation_jobs:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return evaluation_jobs[job_id]
+
+
+async def run_evaluation(
+    job_id: str,
+    concept_name: str,
+    gguf_file: str,
+    layer_start: int,
+    layer_end: int,
+    test_prompts: Optional[list[str]],
+    strengths: Optional[list[float]]
+):
+    """Run evaluation in background"""
+    try:
+        from evaluator import SteeringEvaluator
+
+        def update_progress(msg: str, progress: float):
+            evaluation_jobs[job_id].update({
+                "progress": progress,
+                "current_step": msg
+            })
+
+        evaluator = SteeringEvaluator(webui_url="http://localhost:8080")
+
+        result = await evaluator.evaluate(
+            concept_name=concept_name,
+            gguf_file=gguf_file,
+            layer_start=layer_start,
+            layer_end=layer_end,
+            test_prompts=test_prompts,
+            strengths=strengths,
+            progress_callback=update_progress
+        )
+
+        # Save evaluation results
+        results_dir = BASE_DIR / "results"
+        results_dir.mkdir(exist_ok=True)
+
+        # Find concept ID from gguf_file name
+        concept_id = gguf_file.replace(".gguf", "")
+        eval_path = results_dir / f"eval_{concept_id}.json"
+
+        with open(eval_path, 'w') as f:
+            json.dump(result.to_dict(), f, indent=2, default=str)
+
+        evaluation_jobs[job_id].update({
+            "status": "complete",
+            "progress": 1.0,
+            "current_step": "Evaluation complete!",
+            "result": {
+                "steering_score": result.steering_score,
+                "direction_alignment": result.direction_alignment,
+                "length_ratio": result.length_ratio,
+                "strength_correlation": result.strength_correlation,
+                "recommended_strength": result.recommended_strength
+            }
+        })
+
+    except Exception as e:
+        import traceback
+        evaluation_jobs[job_id].update({
+            "status": "failed",
+            "progress": 0.0,
+            "current_step": "Evaluation failed",
+            "error": str(e)
+        })
+        traceback.print_exc()
 
 
 @app.on_event("shutdown")
