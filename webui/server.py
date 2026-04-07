@@ -606,6 +606,125 @@ async def run_evaluation(
         traceback.print_exc()
 
 
+# ============ Hub Sharing Endpoints ============
+
+class ShareRequest(BaseModel):
+    concept_id: str
+    description: str = ""
+    author: str = "anonymous"
+    tags: list[str] = []
+    hf_token: Optional[str] = None
+
+
+@app.get("/api/hub/concepts")
+async def list_hub_concepts(tag: str = None):
+    """List concepts from the community Hub."""
+    try:
+        from hub_manager import list_community_concepts
+        concepts = list_community_concepts(tag)
+        return {
+            "concepts": [c.to_dict() for c in concepts],
+            "count": len(concepts)
+        }
+    except ImportError:
+        return {"error": "huggingface_hub not installed", "concepts": []}
+    except Exception as e:
+        return {"error": str(e), "concepts": []}
+
+
+@app.get("/api/hub/search")
+async def search_hub_concepts(q: str):
+    """Search concepts in the Hub."""
+    try:
+        from hub_manager import HubManager
+        manager = HubManager()
+        concepts = manager.search_concepts(q)
+        return {
+            "concepts": [c.to_dict() for c in concepts],
+            "count": len(concepts),
+            "query": q
+        }
+    except ImportError:
+        return {"error": "huggingface_hub not installed", "concepts": []}
+    except Exception as e:
+        return {"error": str(e), "concepts": []}
+
+
+@app.post("/api/hub/download/{concept_id}")
+async def download_hub_concept(concept_id: str):
+    """Download a concept from the Hub to local vectors directory."""
+    try:
+        from hub_manager import download_community_concept
+        local_path, card = download_community_concept(concept_id, VECTORS_DIR)
+
+        # Also save metadata locally
+        meta_path = VECTORS_DIR / f"{concept_id}_metadata.json"
+        with open(meta_path, 'w') as f:
+            json.dump(card.to_dict(), f, indent=2)
+
+        return {
+            "success": True,
+            "concept_id": concept_id,
+            "name": card.name,
+            "gguf_file": f"{concept_id}.gguf",
+            "local_path": str(local_path)
+        }
+    except ImportError:
+        raise HTTPException(status_code=500, detail="huggingface_hub not installed")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/hub/share")
+async def share_concept_to_hub(request: ShareRequest):
+    """Share a local concept to the community Hub."""
+    try:
+        from hub_manager import share_concept
+
+        # Get local metadata
+        meta_path = VECTORS_DIR / f"{request.concept_id}_metadata.json"
+        if not meta_path.exists():
+            raise HTTPException(status_code=404, detail="Concept metadata not found")
+
+        with open(meta_path) as f:
+            metadata = json.load(f)
+
+        # Get evaluation if exists
+        eval_path = BASE_DIR / "results" / f"eval_{request.concept_id}.json"
+        evaluation = None
+        if eval_path.exists():
+            with open(eval_path) as f:
+                evaluation = json.load(f)
+
+        # Get GGUF path
+        gguf_path = VECTORS_DIR / f"{request.concept_id}.gguf"
+        if not gguf_path.exists():
+            raise HTTPException(status_code=404, detail="Concept GGUF not found")
+
+        # Share to Hub
+        url = share_concept(
+            concept_id=request.concept_id,
+            gguf_path=gguf_path,
+            metadata=metadata,
+            evaluation=evaluation,
+            description=request.description,
+            author=request.author,
+            tags=request.tags,
+            token=request.hf_token
+        )
+
+        return {
+            "success": True,
+            "url": url,
+            "concept_id": request.concept_id
+        }
+
+    except ImportError:
+        raise HTTPException(status_code=500, detail="huggingface_hub not installed")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.on_event("shutdown")
 def shutdown_event():
     """Clean up llama-server on shutdown"""

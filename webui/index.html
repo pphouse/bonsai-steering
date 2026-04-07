@@ -548,6 +548,128 @@
             opacity: 0.5;
             cursor: not-allowed;
         }
+
+        /* Hub styles */
+        .share-concept-btn {
+            background: #9b59b6;
+            border: none;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            margin-top: 6px;
+            margin-right: 4px;
+        }
+
+        .share-concept-btn:hover {
+            background: #a569bd;
+        }
+
+        .hub-concept-item {
+            background: #0f3460;
+            border-radius: 6px;
+            padding: 10px;
+            margin-bottom: 8px;
+            border-left: 3px solid #4ecdc4;
+        }
+
+        .hub-concept-item .author {
+            font-size: 0.7rem;
+            color: #666;
+        }
+
+        .hub-concept-item .stats {
+            font-size: 0.7rem;
+            color: #888;
+            margin-top: 4px;
+        }
+
+        .download-btn {
+            background: #4ecdc4;
+            border: none;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            margin-top: 6px;
+        }
+
+        .download-btn:hover {
+            background: #5fd4cc;
+        }
+
+        /* Modal for sharing */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.7);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal.show {
+            display: flex;
+        }
+
+        .modal-content {
+            background: #16213e;
+            padding: 20px;
+            border-radius: 8px;
+            max-width: 400px;
+            width: 90%;
+        }
+
+        .modal-content h3 {
+            margin-bottom: 15px;
+            color: #e94560;
+        }
+
+        .modal-content input,
+        .modal-content textarea {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            border: 1px solid #333;
+            background: #1a1a2e;
+            color: #fff;
+        }
+
+        .modal-content textarea {
+            min-height: 60px;
+            resize: vertical;
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .modal-buttons button {
+            flex: 1;
+            padding: 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .modal-buttons .cancel-btn {
+            background: #666;
+            color: white;
+        }
+
+        .modal-buttons .submit-btn {
+            background: #9b59b6;
+            color: white;
+        }
     </style>
 </head>
 <body>
@@ -644,6 +766,18 @@
         <h3>Extracted Concepts</h3>
         <div id="concepts-list" class="concepts-list"></div>
 
+        <h3>Community Hub</h3>
+        <div class="steering-panel">
+            <div class="steering-row">
+                <label>Search Concepts</label>
+                <input type="text" id="hub-search" placeholder="Search community concepts..." onkeyup="if(event.key==='Enter')searchHub()">
+            </div>
+            <button class="apply-btn" style="background: #4ecdc4;" onclick="searchHub()">
+                Browse Hub
+            </button>
+            <div id="hub-concepts" class="concepts-list" style="margin-top: 10px;"></div>
+        </div>
+
         <h3>Generation Settings</h3>
         <div class="settings-row">
             <div>
@@ -679,6 +813,34 @@
                     rows="1"
                 ></textarea>
                 <button class="send-btn" id="send-btn" onclick="sendMessage()">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Share Modal -->
+    <div class="modal" id="share-modal">
+        <div class="modal-content">
+            <h3>Share to Community Hub</h3>
+            <input type="hidden" id="share-concept-id">
+            <div>
+                <label style="font-size: 0.8rem; color: #888;">Author Name</label>
+                <input type="text" id="share-author" placeholder="Your name or username">
+            </div>
+            <div>
+                <label style="font-size: 0.8rem; color: #888;">Description</label>
+                <textarea id="share-description" placeholder="Describe what this concept does..."></textarea>
+            </div>
+            <div>
+                <label style="font-size: 0.8rem; color: #888;">Tags (comma separated)</label>
+                <input type="text" id="share-tags" placeholder="e.g., emotion, style, language">
+            </div>
+            <div>
+                <label style="font-size: 0.8rem; color: #888;">HuggingFace Token (optional)</label>
+                <input type="password" id="share-token" placeholder="hf_...">
+            </div>
+            <div class="modal-buttons">
+                <button class="cancel-btn" onclick="closeShareModal()">Cancel</button>
+                <button class="submit-btn" onclick="submitShare()">Share</button>
             </div>
         </div>
     </div>
@@ -1187,6 +1349,9 @@
                         <button class="eval-concept-btn" onclick="startEvaluation('${c.name}', '${c.gguf_file}', ${Math.min(...c.layers)}, ${Math.max(...c.layers)}, '${c.id}')">
                             Evaluate
                         </button>
+                        <button class="share-concept-btn" onclick="openShareModal('${c.id}', '${c.name}')">
+                            Share
+                        </button>
                     ` : '<span style="font-size: 0.75rem; color: #666;">No GGUF</span>'}
                     ${c.evaluation ? renderEvalResults(c.evaluation) : ''}
                     <div class="eval-progress" id="eval-progress-${c.id}" style="display: none;">
@@ -1306,6 +1471,126 @@
                 layer_start: layerStart,
                 layer_end: layerEnd
             }, `Applied: ${name}`);
+        }
+
+        // ============ Hub Integration ============
+
+        async function searchHub() {
+            const query = document.getElementById('hub-search').value.trim();
+            const container = document.getElementById('hub-concepts');
+
+            container.innerHTML = '<p style="color: #888; text-align: center; padding: 10px;">Loading...</p>';
+
+            try {
+                const url = query
+                    ? `/api/hub/search?q=${encodeURIComponent(query)}`
+                    : '/api/hub/concepts';
+
+                const response = await fetch(url);
+                const data = await response.json();
+
+                if (data.error) {
+                    container.innerHTML = `<p style="color: #e74c3c; text-align: center; padding: 10px; font-size: 0.85rem;">${data.error}</p>`;
+                    return;
+                }
+
+                if (!data.concepts || data.concepts.length === 0) {
+                    container.innerHTML = '<p style="color: #666; text-align: center; padding: 10px; font-size: 0.85rem;">No concepts found</p>';
+                    return;
+                }
+
+                container.innerHTML = data.concepts.map(c => `
+                    <div class="hub-concept-item">
+                        <div class="name">${c.name}</div>
+                        <div class="author">by ${c.author || 'anonymous'}</div>
+                        <div class="info">${c.description ? c.description.substring(0, 80) + '...' : 'No description'}</div>
+                        <div class="stats">
+                            Layers: ${c.layers ? c.layers.join(', ') : 'N/A'} |
+                            ${c.evaluation ? `Score: ${c.evaluation.steering_score?.toFixed(2) || 'N/A'}` : 'Not evaluated'}
+                        </div>
+                        <button class="download-btn" onclick="downloadFromHub('${c.id}')">
+                            Download
+                        </button>
+                    </div>
+                `).join('');
+
+            } catch (e) {
+                console.error('Hub search error:', e);
+                container.innerHTML = '<p style="color: #e74c3c; text-align: center; padding: 10px; font-size: 0.85rem;">Failed to connect to Hub</p>';
+            }
+        }
+
+        async function downloadFromHub(conceptId) {
+            try {
+                addSystemMessage(`Downloading concept "${conceptId}" from Hub...`);
+
+                const response = await fetch(`/api/hub/download/${conceptId}`, {
+                    method: 'POST'
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    addSystemMessage(`Downloaded "${data.name}" successfully!`);
+                    await loadConcepts();
+                    await loadVectors();
+                } else {
+                    throw new Error(data.detail || 'Download failed');
+                }
+
+            } catch (e) {
+                console.error('Download error:', e);
+                alert('Download failed: ' + e.message);
+            }
+        }
+
+        function openShareModal(conceptId, conceptName) {
+            document.getElementById('share-concept-id').value = conceptId;
+            document.getElementById('share-description').value = `Steering concept for "${conceptName}"`;
+            document.getElementById('share-modal').classList.add('show');
+        }
+
+        function closeShareModal() {
+            document.getElementById('share-modal').classList.remove('show');
+        }
+
+        async function submitShare() {
+            const conceptId = document.getElementById('share-concept-id').value;
+            const author = document.getElementById('share-author').value || 'anonymous';
+            const description = document.getElementById('share-description').value;
+            const tagsStr = document.getElementById('share-tags').value;
+            const token = document.getElementById('share-token').value || null;
+
+            const tags = tagsStr ? tagsStr.split(',').map(t => t.trim()).filter(t => t) : [];
+
+            try {
+                addSystemMessage(`Sharing concept to Hub...`);
+
+                const response = await fetch('/api/hub/share', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        concept_id: conceptId,
+                        description: description,
+                        author: author,
+                        tags: tags,
+                        hf_token: token
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    addSystemMessage(`Shared successfully! URL: ${data.url}`);
+                    closeShareModal();
+                } else {
+                    throw new Error(data.detail || 'Share failed');
+                }
+
+            } catch (e) {
+                console.error('Share error:', e);
+                alert('Share failed: ' + e.message);
+            }
         }
 
         // Update init to load concepts
