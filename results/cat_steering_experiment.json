@@ -1,0 +1,47 @@
+{
+  "experiment": "cat_topic_steering",
+  "model": "Bonsai-8B (1-bit Q1_0_g128)",
+  "positive_prompts": [
+    "Cats are wonderful pets that bring joy to millions.",
+    "My cat loves to chase mice around the house.",
+    "The kitten played with a ball of yarn all day.",
+    "Feline companions have been domesticated for thousands of years.",
+    "The cat purred contentedly on my lap.",
+    "Whiskers twitched as the cat stalked its prey.",
+    "Meowing softly, the cat asked for food.",
+    "The tabby cat lounged in the sunny window."
+  ],
+  "negative_prompts": [
+    "The weather today is quite pleasant.",
+    "Mathematics is an important subject in school.",
+    "The history of ancient Rome is fascinating.",
+    "Technology has transformed our daily lives.",
+    "The economy shows signs of improvement.",
+    "Scientific research advances human knowledge.",
+    "Music brings people together across cultures.",
+    "The mountain view was breathtaking."
+  ],
+  "target_layers": [
+    10,
+    15,
+    20,
+    25
+  ],
+  "steering_vector_norms": {
+    "10": 71.7549819946289,
+    "15": 148.33836364746094,
+    "20": 280.7716064453125,
+    "25": 727.555419921875
+  },
+  "test_prompts": [
+    "What is 2+2?",
+    "Tell me about your day.",
+    "The weather is nice today."
+  ],
+  "strengths_tested": [
+    0.0,
+    0.3,
+    0.5,
+    1.0
+  ]
+}

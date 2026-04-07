@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+*.egg-info/
+dist/
+build/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+llama.cpp/
+activations*/
+demo_activations/
+cat_activations/
+cat_concept_activations/
+japanese_activations*/
+*.npy
+*.gguf
+
+# Keep vectors directory structure but ignore large files
+vectors/*.npy
+vectors/*.gguf
+
+# Logs
+*.log
+
+# Temp files
+/tmp/
+*.tmp

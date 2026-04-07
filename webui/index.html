@@ -1,0 +1,1163 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bonsai Activation Steering Chat</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            height: 100vh;
+            display: flex;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 340px;
+            background: #16213e;
+            padding: 20px;
+            overflow-y: auto;
+            border-right: 1px solid #0f3460;
+        }
+
+        .sidebar h2 {
+            color: #e94560;
+            margin-bottom: 15px;
+            font-size: 1.2rem;
+        }
+
+        .sidebar h3 {
+            color: #fff;
+            margin: 20px 0 10px;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        /* Current Status */
+        .status-panel {
+            background: #0f3460;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+
+        .status-panel.loading {
+            opacity: 0.6;
+            pointer-events: none;
+        }
+
+        .status-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 0.85rem;
+        }
+
+        .status-item label {
+            color: #888;
+        }
+
+        .status-item value {
+            color: #4ecdc4;
+            font-weight: bold;
+        }
+
+        .status-item value.none {
+            color: #666;
+        }
+
+        .server-status {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: bold;
+        }
+
+        .server-status.online {
+            background: #27ae60;
+            color: white;
+        }
+
+        .server-status.offline {
+            background: #e74c3c;
+            color: white;
+        }
+
+        .server-status.loading {
+            background: #f39c12;
+            color: white;
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* Presets */
+        .preset-btn {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 8px;
+            background: #0f3460;
+            border: 1px solid #1a1a4e;
+            color: #fff;
+            border-radius: 6px;
+            cursor: pointer;
+            text-align: left;
+            transition: all 0.2s;
+        }
+
+        .preset-btn:hover {
+            background: #1a1a4e;
+            border-color: #e94560;
+        }
+
+        .preset-btn.active {
+            background: #e94560;
+            border-color: #e94560;
+        }
+
+        .preset-btn small {
+            display: block;
+            color: #888;
+            font-size: 0.75rem;
+            margin-top: 4px;
+        }
+
+        .preset-btn.active small {
+            color: #ffd;
+        }
+
+        .preset-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Custom Steering */
+        .steering-panel {
+            background: #0f3460;
+            border-radius: 8px;
+            padding: 15px;
+        }
+
+        .steering-row {
+            margin-bottom: 15px;
+        }
+
+        .steering-row label {
+            display: block;
+            font-size: 0.8rem;
+            color: #888;
+            margin-bottom: 6px;
+        }
+
+        .steering-row select,
+        .steering-row input {
+            width: 100%;
+            padding: 8px 10px;
+            border-radius: 4px;
+            border: 1px solid #333;
+            background: #1a1a2e;
+            color: #fff;
+            font-size: 0.9rem;
+        }
+
+        .strength-display {
+            text-align: center;
+            color: #e94560;
+            font-weight: bold;
+            font-size: 1.1rem;
+            margin-bottom: 5px;
+        }
+
+        .strength-slider {
+            width: 100%;
+        }
+
+        .layer-range {
+            display: flex;
+            gap: 10px;
+        }
+
+        .layer-range > div {
+            flex: 1;
+        }
+
+        .apply-btn {
+            width: 100%;
+            padding: 12px;
+            background: #e94560;
+            border: none;
+            border-radius: 6px;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 15px;
+            transition: background 0.2s;
+        }
+
+        .apply-btn:hover {
+            background: #ff6b6b;
+        }
+
+        .apply-btn:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+
+        /* System Prompt (supplementary) */
+        .system-prompt-section {
+            margin-top: 20px;
+        }
+
+        .system-prompt-section textarea {
+            width: 100%;
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #333;
+            background: #1a1a2e;
+            color: #fff;
+            font-size: 0.85rem;
+            resize: vertical;
+            min-height: 60px;
+        }
+
+        .system-prompt-section small {
+            display: block;
+            color: #666;
+            font-size: 0.75rem;
+            margin-top: 5px;
+        }
+
+        /* Chat Area */
+        .chat-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        .chat-header {
+            background: #16213e;
+            padding: 15px 20px;
+            border-bottom: 1px solid #0f3460;
+        }
+
+        .chat-header h1 {
+            font-size: 1.3rem;
+            color: #e94560;
+        }
+
+        .chat-header .status {
+            font-size: 0.8rem;
+            color: #888;
+            margin-top: 5px;
+        }
+
+        .chat-header .status.streaming {
+            color: #4ecdc4;
+        }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        .message {
+            max-width: 80%;
+            margin-bottom: 15px;
+            padding: 12px 16px;
+            border-radius: 12px;
+            line-height: 1.5;
+            white-space: pre-wrap;
+        }
+
+        .message.user {
+            background: #e94560;
+            margin-left: auto;
+            border-bottom-right-radius: 4px;
+        }
+
+        .message.assistant {
+            background: #0f3460;
+            margin-right: auto;
+            border-bottom-left-radius: 4px;
+        }
+
+        .message.assistant.streaming {
+            border: 1px solid #4ecdc4;
+        }
+
+        .message.system {
+            background: #333;
+            margin: 10px auto;
+            max-width: 90%;
+            text-align: center;
+            font-size: 0.85rem;
+            color: #888;
+        }
+
+        .message .steering-info {
+            font-size: 0.75rem;
+            color: #aaa;
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid #ffffff22;
+        }
+
+        .chat-input-area {
+            padding: 20px;
+            background: #16213e;
+            border-top: 1px solid #0f3460;
+        }
+
+        .chat-input-wrapper {
+            display: flex;
+            gap: 10px;
+        }
+
+        .chat-input {
+            flex: 1;
+            padding: 12px 16px;
+            border-radius: 8px;
+            border: 1px solid #0f3460;
+            background: #1a1a2e;
+            color: #fff;
+            font-size: 1rem;
+            resize: none;
+        }
+
+        .chat-input:focus {
+            outline: none;
+            border-color: #e94560;
+        }
+
+        .send-btn {
+            padding: 12px 24px;
+            background: #e94560;
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .send-btn:hover {
+            background: #ff6b6b;
+        }
+
+        .send-btn:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+
+        /* Settings */
+        .settings-row {
+            display: flex;
+            gap: 15px;
+            margin-top: 10px;
+        }
+
+        .settings-row > div {
+            flex: 1;
+        }
+
+        .settings-row label {
+            font-size: 0.8rem;
+            color: #888;
+            display: block;
+            margin-bottom: 4px;
+        }
+
+        .settings-row input {
+            width: 100%;
+            padding: 6px 8px;
+            border-radius: 4px;
+            border: 1px solid #333;
+            background: #1a1a2e;
+            color: #fff;
+        }
+
+        /* Cursor animation */
+        .cursor {
+            display: inline-block;
+            width: 8px;
+            height: 16px;
+            background: #4ecdc4;
+            margin-left: 2px;
+            animation: blink 0.8s infinite;
+        }
+
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0; }
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #1a1a2e;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #0f3460;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #e94560;
+        }
+
+        /* Progress bar */
+        .progress-bar-container {
+            width: 100%;
+            height: 8px;
+            background: #1a1a2e;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 8px;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #e94560, #4ecdc4);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .progress-text {
+            font-size: 0.8rem;
+            color: #888;
+            text-align: center;
+        }
+
+        /* Concepts list */
+        .concepts-list {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .concept-item {
+            background: #0f3460;
+            border-radius: 6px;
+            padding: 10px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .concept-item:hover {
+            background: #1a1a4e;
+            border-color: #e94560;
+        }
+
+        .concept-item .name {
+            font-weight: bold;
+            color: #4ecdc4;
+        }
+
+        .concept-item .info {
+            font-size: 0.75rem;
+            color: #888;
+            margin-top: 4px;
+        }
+
+        .concept-item .apply-concept-btn {
+            background: #e94560;
+            border: none;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            margin-top: 6px;
+        }
+
+        .concept-item .apply-concept-btn:hover {
+            background: #ff6b6b;
+        }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <h2>Activation Steering</h2>
+
+        <!-- Current Status -->
+        <div class="status-panel" id="status-panel">
+            <div class="status-item">
+                <label>Server:</label>
+                <span class="server-status offline" id="server-status">Checking...</span>
+            </div>
+            <div class="status-item">
+                <label>Control Vector:</label>
+                <value id="current-vector" class="none">None</value>
+            </div>
+            <div class="status-item">
+                <label>Strength:</label>
+                <value id="current-strength">0.0</value>
+            </div>
+            <div class="status-item">
+                <label>Layers:</label>
+                <value id="current-layers">-</value>
+            </div>
+        </div>
+
+        <h3>Quick Presets</h3>
+        <div id="presets"></div>
+
+        <h3>Custom Steering</h3>
+        <div class="steering-panel">
+            <div class="steering-row">
+                <label>Control Vector (GGUF)</label>
+                <select id="vector-select">
+                    <option value="">None (No Steering)</option>
+                </select>
+            </div>
+            <div class="steering-row">
+                <label>Strength</label>
+                <div class="strength-display" id="strength-display">0.20</div>
+                <input type="range" class="strength-slider" id="strength-slider"
+                    min="-1" max="1" step="0.01" value="0.2">
+            </div>
+            <div class="steering-row">
+                <label>Layer Range</label>
+                <div class="layer-range">
+                    <div>
+                        <input type="number" id="layer-start" value="10" min="1" max="35" placeholder="Start">
+                    </div>
+                    <div>
+                        <input type="number" id="layer-end" value="25" min="1" max="35" placeholder="End">
+                    </div>
+                </div>
+            </div>
+            <button class="apply-btn" id="apply-btn" onclick="applyCustomSteering()">
+                Apply Steering
+            </button>
+        </div>
+
+        <div class="system-prompt-section">
+            <h3>System Prompt (Optional)</h3>
+            <textarea id="system-prompt" placeholder="Add supplementary instructions..."></textarea>
+            <small>Supplementary to steering. E.g., "Reply briefly."</small>
+        </div>
+
+        <h3>Concept Extraction</h3>
+        <div class="steering-panel">
+            <div class="steering-row">
+                <label>Concept Name</label>
+                <input type="text" id="concept-name" placeholder="e.g., happiness, formal speech, coding style">
+            </div>
+            <div class="steering-row">
+                <label>Number of Prompts</label>
+                <div class="layer-range">
+                    <div>
+                        <input type="number" id="num-positive" value="8" min="3" max="20" placeholder="Positive">
+                    </div>
+                    <div>
+                        <input type="number" id="num-negative" value="8" min="3" max="20" placeholder="Negative">
+                    </div>
+                </div>
+            </div>
+            <button class="apply-btn" id="extract-btn" onclick="startExtraction()">
+                Extract Concept Vector
+            </button>
+            <div id="extraction-progress" style="display: none; margin-top: 15px;">
+                <div class="progress-bar-container">
+                    <div class="progress-bar" id="progress-bar"></div>
+                </div>
+                <div class="progress-text" id="progress-text">Starting...</div>
+            </div>
+        </div>
+
+        <h3>Extracted Concepts</h3>
+        <div id="concepts-list" class="concepts-list"></div>
+
+        <h3>Generation Settings</h3>
+        <div class="settings-row">
+            <div>
+                <label>Max Tokens</label>
+                <input type="number" id="max-tokens" value="200" min="10" max="1000">
+            </div>
+            <div>
+                <label>Temperature</label>
+                <input type="number" id="temperature" value="0.7" min="0" max="2" step="0.1">
+            </div>
+        </div>
+    </div>
+
+    <div class="chat-container">
+        <div class="chat-header">
+            <h1>Bonsai-8B Steering Chat</h1>
+            <div class="status" id="chat-status">Ready</div>
+        </div>
+
+        <div class="chat-messages" id="messages">
+            <div class="message system">
+                Welcome! Select a steering preset or configure custom steering in the sidebar.
+                Control vectors modify the model's behavior at inference time.
+            </div>
+        </div>
+
+        <div class="chat-input-area">
+            <div class="chat-input-wrapper">
+                <textarea
+                    class="chat-input"
+                    id="user-input"
+                    placeholder="Type your message... (Enter to send, Shift+Enter for new line)"
+                    rows="1"
+                ></textarea>
+                <button class="send-btn" id="send-btn" onclick="sendMessage()">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let presets = [];
+        let vectors = [];
+        let currentConfig = null;
+        let isGenerating = false;
+        let isApplying = false;
+
+        // Initialize
+        async function init() {
+            await Promise.all([
+                loadVectors(),
+                loadPresets(),
+                loadStatus()
+            ]);
+            setupEventListeners();
+
+            // Poll status periodically
+            setInterval(loadStatus, 5000);
+        }
+
+        async function loadVectors() {
+            try {
+                const response = await fetch('/api/steering/vectors');
+                const data = await response.json();
+                vectors = data.vectors;
+                renderVectorSelect();
+            } catch (e) {
+                console.error('Failed to load vectors:', e);
+            }
+        }
+
+        async function loadPresets() {
+            try {
+                const response = await fetch('/api/presets');
+                const data = await response.json();
+                presets = data.presets;
+                renderPresets();
+            } catch (e) {
+                console.error('Failed to load presets:', e);
+            }
+        }
+
+        async function loadStatus() {
+            try {
+                const response = await fetch('/api/steering/status');
+                const data = await response.json();
+                updateStatusDisplay(data);
+            } catch (e) {
+                console.error('Failed to load status:', e);
+                updateStatusDisplay({ server_running: false, config: null });
+            }
+        }
+
+        function updateStatusDisplay(data) {
+            const serverStatus = document.getElementById('server-status');
+            const currentVector = document.getElementById('current-vector');
+            const currentStrength = document.getElementById('current-strength');
+            const currentLayers = document.getElementById('current-layers');
+
+            if (data.server_running) {
+                serverStatus.className = 'server-status online';
+                serverStatus.textContent = 'Online';
+            } else {
+                serverStatus.className = 'server-status offline';
+                serverStatus.textContent = 'Offline';
+            }
+
+            if (data.config) {
+                currentConfig = data.config;
+
+                if (data.config.gguf_file) {
+                    currentVector.textContent = data.config.gguf_file;
+                    currentVector.className = '';
+                } else {
+                    currentVector.textContent = 'None';
+                    currentVector.className = 'none';
+                }
+
+                currentStrength.textContent = data.config.strength.toFixed(2);
+                currentLayers.textContent = `${data.config.layer_start} - ${data.config.layer_end}`;
+
+                // Update active preset button
+                updateActivePreset();
+            }
+        }
+
+        function updateActivePreset() {
+            document.querySelectorAll('.preset-btn').forEach((btn, idx) => {
+                const preset = presets[idx];
+                const steering = preset.steering;
+
+                const isMatch =
+                    steering.gguf_file === currentConfig.gguf_file &&
+                    Math.abs(steering.strength - currentConfig.strength) < 0.01;
+
+                btn.classList.toggle('active', isMatch);
+            });
+        }
+
+        function renderVectorSelect() {
+            const select = document.getElementById('vector-select');
+            select.innerHTML = '<option value="">None (No Steering)</option>' +
+                vectors.map(v => `<option value="${v.filename}">${v.name} (${v.size_kb}KB)</option>`).join('');
+        }
+
+        function renderPresets() {
+            const container = document.getElementById('presets');
+            container.innerHTML = presets.map((preset, idx) => `
+                <button class="preset-btn" onclick="applyPreset(${idx})" ${isApplying ? 'disabled' : ''}>
+                    ${preset.name}
+                    <small>${preset.description}</small>
+                </button>
+            `).join('');
+        }
+
+        async function applyPreset(idx) {
+            const preset = presets[idx];
+            await applySteering(preset.steering, `Applied preset: ${preset.name}`);
+        }
+
+        async function applyCustomSteering() {
+            const ggufFile = document.getElementById('vector-select').value || null;
+            const strength = parseFloat(document.getElementById('strength-slider').value);
+            const layerStart = parseInt(document.getElementById('layer-start').value);
+            const layerEnd = parseInt(document.getElementById('layer-end').value);
+
+            const config = {
+                gguf_file: ggufFile,
+                strength: strength,
+                layer_start: layerStart,
+                layer_end: layerEnd
+            };
+
+            const label = ggufFile ? `${ggufFile} @ ${strength.toFixed(2)}` : 'No Steering';
+            await applySteering(config, `Applied: ${label}`);
+        }
+
+        async function applySteering(config, message) {
+            if (isApplying) return;
+
+            isApplying = true;
+            const applyBtn = document.getElementById('apply-btn');
+            const statusPanel = document.getElementById('status-panel');
+            const serverStatus = document.getElementById('server-status');
+
+            applyBtn.disabled = true;
+            applyBtn.textContent = 'Restarting Server...';
+            statusPanel.classList.add('loading');
+            serverStatus.className = 'server-status loading';
+            serverStatus.textContent = 'Restarting...';
+
+            // Disable preset buttons
+            document.querySelectorAll('.preset-btn').forEach(btn => btn.disabled = true);
+
+            addSystemMessage(message + ' (restarting server...)');
+
+            try {
+                const response = await fetch('/api/steering/apply', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(config)
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    addSystemMessage('Server ready with new steering configuration');
+                    await loadStatus();
+                } else {
+                    addSystemMessage(`Error: ${data.error}`);
+                }
+            } catch (e) {
+                console.error('Error applying steering:', e);
+                addSystemMessage(`Error: ${e.message}`);
+            }
+
+            isApplying = false;
+            applyBtn.disabled = false;
+            applyBtn.textContent = 'Apply Steering';
+            statusPanel.classList.remove('loading');
+            document.querySelectorAll('.preset-btn').forEach(btn => btn.disabled = false);
+
+            await loadStatus();
+        }
+
+        function setupEventListeners() {
+            const input = document.getElementById('user-input');
+            const strengthSlider = document.getElementById('strength-slider');
+            const strengthDisplay = document.getElementById('strength-display');
+
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                }
+            });
+
+            input.addEventListener('input', () => {
+                input.style.height = 'auto';
+                input.style.height = Math.min(input.scrollHeight, 150) + 'px';
+            });
+
+            strengthSlider.addEventListener('input', () => {
+                strengthDisplay.textContent = parseFloat(strengthSlider.value).toFixed(2);
+            });
+        }
+
+        async function sendMessage() {
+            if (isGenerating || isApplying) return;
+
+            const input = document.getElementById('user-input');
+            const message = input.value.trim();
+            const systemPrompt = document.getElementById('system-prompt').value.trim();
+
+            if (!message) return;
+
+            const sendBtn = document.getElementById('send-btn');
+            sendBtn.disabled = true;
+            isGenerating = true;
+
+            // Add user message
+            addMessage(message, 'user');
+            input.value = '';
+            input.style.height = 'auto';
+
+            // Create steering info for display
+            let steeringInfo = 'No Steering';
+            if (currentConfig && currentConfig.gguf_file) {
+                steeringInfo = `${currentConfig.gguf_file} @ ${currentConfig.strength.toFixed(2)} (L${currentConfig.layer_start}-${currentConfig.layer_end})`;
+            }
+
+            const assistantDiv = createStreamingMessage(steeringInfo);
+            setStatus('Generating...', true);
+
+            try {
+                const response = await fetch('/api/chat/stream', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        message: message,
+                        max_tokens: parseInt(document.getElementById('max-tokens').value),
+                        temperature: parseFloat(document.getElementById('temperature').value),
+                        system_prompt: systemPrompt
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    buffer += decoder.decode(value, { stream: true });
+
+                    // Process SSE messages
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop() || '';
+
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            try {
+                                const data = JSON.parse(line.slice(6));
+                                if (data.token) {
+                                    appendToStreamingMessage(assistantDiv, data.token);
+                                }
+                                if (data.error) {
+                                    appendToStreamingMessage(assistantDiv, ` [Error: ${data.error}]`);
+                                }
+                                if (data.done) {
+                                    finalizeStreamingMessage(assistantDiv);
+                                }
+                            } catch (e) {
+                                // Ignore parse errors
+                            }
+                        }
+                    }
+                }
+
+                finalizeStreamingMessage(assistantDiv);
+                setStatus('Ready');
+
+            } catch (e) {
+                console.error('Error:', e);
+                finalizeStreamingMessage(assistantDiv, ` [Error: ${e.message}]`);
+                setStatus('Error - try again');
+            }
+
+            sendBtn.disabled = false;
+            isGenerating = false;
+        }
+
+        function addMessage(text, type) {
+            const container = document.getElementById('messages');
+            const div = document.createElement('div');
+            div.className = `message ${type}`;
+            div.textContent = text;
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function createStreamingMessage(steeringInfo) {
+            const container = document.getElementById('messages');
+            const div = document.createElement('div');
+            div.className = 'message assistant streaming';
+
+            const contentSpan = document.createElement('span');
+            contentSpan.className = 'content';
+            div.appendChild(contentSpan);
+
+            const cursor = document.createElement('span');
+            cursor.className = 'cursor';
+            div.appendChild(cursor);
+
+            div.dataset.steeringInfo = steeringInfo;
+
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
+
+            return div;
+        }
+
+        function appendToStreamingMessage(div, text) {
+            const contentSpan = div.querySelector('.content');
+            contentSpan.textContent += text;
+
+            const container = document.getElementById('messages');
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function finalizeStreamingMessage(div, suffix = '') {
+            div.classList.remove('streaming');
+
+            const cursor = div.querySelector('.cursor');
+            if (cursor) cursor.remove();
+
+            const contentSpan = div.querySelector('.content');
+            if (suffix) {
+                contentSpan.textContent += suffix;
+            }
+
+            // Add steering info
+            const steeringInfo = div.dataset.steeringInfo;
+            if (steeringInfo) {
+                const infoDiv = document.createElement('div');
+                infoDiv.className = 'steering-info';
+                infoDiv.textContent = steeringInfo;
+                div.appendChild(infoDiv);
+            }
+        }
+
+        function addSystemMessage(text) {
+            addMessage(text, 'system');
+        }
+
+        function setStatus(text, streaming = false) {
+            const status = document.getElementById('chat-status');
+            status.textContent = text;
+            status.classList.toggle('streaming', streaming);
+        }
+
+        // ============ Concept Extraction ============
+
+        let isExtracting = false;
+        let extractionJobId = null;
+
+        async function startExtraction() {
+            if (isExtracting) return;
+
+            const conceptName = document.getElementById('concept-name').value.trim();
+            if (!conceptName) {
+                alert('Please enter a concept name');
+                return;
+            }
+
+            const numPositive = parseInt(document.getElementById('num-positive').value);
+            const numNegative = parseInt(document.getElementById('num-negative').value);
+
+            isExtracting = true;
+            const extractBtn = document.getElementById('extract-btn');
+            const progressDiv = document.getElementById('extraction-progress');
+
+            extractBtn.disabled = true;
+            extractBtn.textContent = 'Extracting...';
+            progressDiv.style.display = 'block';
+
+            try {
+                // Start extraction
+                const response = await fetch('/api/extract/start', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        concept_name: conceptName,
+                        num_positive: numPositive,
+                        num_negative: numNegative,
+                        layers: [10, 12, 15, 18, 20, 22, 25]
+                    })
+                });
+
+                const data = await response.json();
+                extractionJobId = data.job_id;
+
+                // Poll for progress
+                await pollExtractionProgress(extractionJobId);
+
+            } catch (e) {
+                console.error('Extraction error:', e);
+                alert('Extraction failed: ' + e.message);
+            }
+
+            isExtracting = false;
+            extractBtn.disabled = false;
+            extractBtn.textContent = 'Extract Concept Vector';
+        }
+
+        async function pollExtractionProgress(jobId) {
+            const progressBar = document.getElementById('progress-bar');
+            const progressText = document.getElementById('progress-text');
+
+            while (true) {
+                try {
+                    const response = await fetch(`/api/extract/${jobId}`);
+                    const data = await response.json();
+
+                    progressBar.style.width = `${data.progress * 100}%`;
+                    progressText.textContent = data.current_step;
+
+                    if (data.status === 'complete') {
+                        addSystemMessage(`Concept "${data.result.name}" extracted successfully!`);
+                        document.getElementById('extraction-progress').style.display = 'none';
+
+                        // Reload concepts and vectors
+                        await loadConcepts();
+                        await loadVectors();
+
+                        // Offer to apply immediately
+                        if (data.result.gguf_file) {
+                            if (confirm(`Apply "${data.result.name}" steering now?`)) {
+                                await applySteering({
+                                    gguf_file: data.result.gguf_file,
+                                    strength: data.result.recommended_strength,
+                                    layer_start: Math.min(...data.result.layers),
+                                    layer_end: Math.max(...data.result.layers)
+                                }, `Applied: ${data.result.name}`);
+                            }
+                        }
+                        break;
+                    }
+
+                    if (data.status === 'failed') {
+                        alert(`Extraction failed: ${data.error}`);
+                        document.getElementById('extraction-progress').style.display = 'none';
+                        break;
+                    }
+
+                    if (data.status === 'cancelled') {
+                        document.getElementById('extraction-progress').style.display = 'none';
+                        break;
+                    }
+
+                    await new Promise(r => setTimeout(r, 1000));
+                } catch (e) {
+                    console.error('Poll error:', e);
+                    break;
+                }
+            }
+        }
+
+        async function loadConcepts() {
+            try {
+                const response = await fetch('/api/concepts');
+                const data = await response.json();
+                renderConcepts(data.concepts);
+            } catch (e) {
+                console.error('Failed to load concepts:', e);
+            }
+        }
+
+        function renderConcepts(concepts) {
+            const container = document.getElementById('concepts-list');
+
+            if (!concepts || concepts.length === 0) {
+                container.innerHTML = '<p style="color: #666; text-align: center; padding: 10px; font-size: 0.85rem;">No concepts extracted yet</p>';
+                return;
+            }
+
+            container.innerHTML = concepts.map(c => `
+                <div class="concept-item">
+                    <div class="name">${c.name}</div>
+                    <div class="info">
+                        Layers: ${c.layers.join(', ')} | Strength: ${c.recommended_strength}
+                    </div>
+                    ${c.has_gguf ? `
+                        <button class="apply-concept-btn" onclick="applyConceptSteering('${c.gguf_file}', ${c.recommended_strength}, ${Math.min(...c.layers)}, ${Math.max(...c.layers)}, '${c.name}')">
+                            Apply
+                        </button>
+                    ` : '<span style="font-size: 0.75rem; color: #666;">No GGUF</span>'}
+                </div>
+            `).join('');
+        }
+
+        async function applyConceptSteering(ggufFile, strength, layerStart, layerEnd, name) {
+            await applySteering({
+                gguf_file: ggufFile,
+                strength: strength,
+                layer_start: layerStart,
+                layer_end: layerEnd
+            }, `Applied: ${name}`);
+        }
+
+        // Update init to load concepts
+        async function init() {
+            await Promise.all([
+                loadVectors(),
+                loadPresets(),
+                loadStatus(),
+                loadConcepts()
+            ]);
+            setupEventListeners();
+
+            // Poll status periodically
+            setInterval(loadStatus, 5000);
+        }
+
+        // Initialize on load
+        init();
+    </script>
+</body>
+</html>
